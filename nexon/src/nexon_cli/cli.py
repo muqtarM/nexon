@@ -50,6 +50,8 @@ from nexon_cli.commands.env_file import env_file
 from nexon_cli.commands.bump_version import bump_version
 from nexon_cli.commands.build_release import build_release
 
+from nexon_cli.commands.security_scan import security_scan
+
 cli = typer.Typer(help="Nexon: Next-Gen Multimedia Environment Manager")
 
 # Register commands
@@ -94,6 +96,8 @@ cli.command(name="completion")(completion)
 
 cli.command(name="bump-version")(bump_version)
 cli.command(name="build-release")(build_release)
+
+cli.command(name="security-scan")(security_scan)
 
 # Entry point
 if __name__ == '__main__':
