@@ -1,20 +1,26 @@
 import subprocess
 from pathlib import Path
-from typing import Optional, List
+from typing import List, Dict
 
-from nexon_cli.utils.file_ops import load_yaml, save_yaml
+from nexon_cli.utils.file_ops import load_yaml
 from nexon_cli.utils.logger import logger
 from nexon_cli.utils.shell_ops import set_environment_variables, reset_environment_variables
-from nexon_cli.utils.paths import PACKAGES_DIR, DOCKERFILES_DIR, ENVIRONMENTS_DIR
+from nexon_cli.utils.paths import PACKAGES_DIR
+
+
+class BuildError(Exception):
+    """Raised when a package build fails."""
 
 
 class BuildManager:
     """
-    Handle building of packages (CMake, PEP-517, custom) and Docker images
+    Builds Nexon packages according to their 'build' section in package.yaml.
+    Supports any command-line build system (CMake, Makefile, pip, custom scripts).
     """
     def __init__(self):
-        self.pkg_dir: Path = PACKAGES_DIR
-        self.docker_dir = DOCKERFILES_DIR
+        self.pkg_dir: Path = Path(PACKAGES_DIR)
+
+        self.pkg_dir.mkdir(parents=True, exist_ok=True)
 
     def build_package(self, name: str, version: str) -> None:
         """
@@ -23,79 +29,42 @@ class BuildManager:
         pkg_root = self.pkg_dir / name / version
         pkg_file = pkg_root / "package.yaml"
         if not pkg_file.exists():
-            logger.error(f"Package spec not found: {name}-{version}")
-            return
+            msg = f"Package spec not found: {name}-{version}"
+            logger.error(msg)
+            raise BuildError(msg)
 
-        # Load spec
-        data = load_yaml(pkg_file)
-        build_spec = data.get("build") or {}
-        env_vars = data.get("env", {})
+        meta = load_yaml(pkg_file)
+        build_cfg: Dict = meta.get("build") or {}
 
-        if env_vars:
-            set_environment_variables(env_vars)
-            logger.info(f"Applied env-vars for build '{name}-{version}'.")
+        # Prepare built-time environment variables
+        env_overrides = build_cfg.get("env", {})
+        # Substitute {root} in env values
+        resolved_env = {
+            key: val.replace("{root}", str(pkg_root))
+            for key, val in env_overrides.items()
+        }
+        set_environment_variables(resolved_env)
 
         # Determine commands
-        commands: List[str] = build_spec.get("commands", [])
+        commands: List[str] = build_cfg.get("commands", [])
         if not commands:
-            logger.error(f"No build commands for '{name}-{version}'. Skipping build")
+            logger.error(f"No build commands defined for '{name}-{version}'. Skipping build")
             reset_environment_variables()
             return
 
-        # Execute each build command sequentially
-        for cmd in commands:
-            logger.info(f"Building '{name}-{version}': '{cmd}'")
-            result = subprocess.call(cmd, shell=True, cwd=str(pkg_root))
-            if result != 0:
-                logger.error(f"Build failed for '{name}-{version}' (exit {result})")
-                reset_environment_variables()
-                return
-
-        reset_environment_variables()
-        logger.success(f"Package '{name}-{version}' build successfully.")
-
-    def build_docker_image(self, env_name: str, tag: Optional[str] = None) -> None:
-        """
-        Build a Docker image for a given environment.
-        Uses lockfile if available, else env spec.
-        """
-        env_file = ENVIRONMENTS_DIR / f"{env_name}.yaml"
-        lock_file = ENVIRONMENTS_DIR / f"{env_name}.lock.yaml"
-        if not env_file.exists():
-            logger.error(f"Environment '{env_name}' not found.")
-            return
-
-        spec_file = lock_file if lock_file.exists() else env_file
-        env_data = load_yaml(spec_file)
-        packages = env_data.get("packages", [])
-
-        # Prepare Docker context
-        docker_env_dir = self.docker_dir / env_name
-        docker_env_dir.mkdir(parents=True, exist_ok=True)
-        dockerfile = docker_env_dir / "Dockerfile"
-
-        lines = [
-            "FROM python:3.12-slim",
-            "WORKDIR /workspace",
-            "RUN apt-get update && apt-get install -y git wget build-essential && rm -rf /var/lib/apt/lists/*",
-            f"COPY {spec_file.name} /workspace/"
-        ]
-        # Placeholder for package-specific install
-        lines.append("# TODO: Add installation steps for packages: {}".format(', '.join(packages)))
-
-        dockerfile.write_text("\n".join(lines), encoding='utf-8')
-        save_yaml(docker_env_dir / spec_file.name, env_data)
-
-        img_tag = tag or f"nexon/{env_name}:latest"
-        cmd = ["docker", "build", "-t", img_tag, str(docker_env_dir)]
-        logger.info(f"Starting Docker build: {img_tag}")
-        result = subprocess.call(cmd)
-        if result != 0:
-            logger.error(f"Docker build failed (exit {result})")
-            return
-
-        logger.success(f"Docker image build: {img_tag}")
-
-
-# Singleton instance for easy import
-build_manager = BuildManager()
+        logger.title(f"Building package: {name}-{version}")
+        try:
+            for cmd in commands:
+                # Substitute {root} placeholder in each command
+                cmd_str = cmd.replace("{root}", str(pkg_root))
+                logger.info(f"-> {cmd_str}")
+                # Run the command in shell; capture output
+                completed = subprocess.run(cmd_str, shell=True)
+                if completed.returncode != 0:
+                    msg = f"Command failed (exit {completed.returncode}): {cmd_str}"
+                    logger.error(msg)
+                    raise BuildError(msg)
+            logger.success(f"Built package: {name}-{version}")
+        finally:
+            # Always reset environment, even on error
+            reset_environment_variables()

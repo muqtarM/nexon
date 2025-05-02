@@ -1,21 +1,24 @@
-import os
 import sys
 from pathlib import Path
 from datetime import datetime
-import yaml
+from typing import List, Dict, Any, Optional
 
 from nexon_cli.utils.logger import logger
 from nexon_cli.utils.file_ops import save_yaml, load_yaml
 from nexon_cli.utils.shell_ops import set_environment_variables, reset_environment_variables
 from nexon_cli.core.interpreter_manager import InterpreterManager
+from nexon_cli.core.auth_manager import AuthManager, AuthError
 from nexon_cli.models.environment_model import EnvironmentModel
 from nexon_cli.core.package_manager import PackageManager
+from nexon_cli.core.plugin_manager import plugin_manager
 from nexon_cli.utils.paths import ENVIRONMENTS_DIR
+from nexon_cli.utils.audit import log
 
 
 # Main Environment Manager
-class EnvironmantManager:
+class EnvironmentManager:
     def __init__(self):
+        self.auth = AuthManager()
         self.interpreter_manager = InterpreterManager()
         # Ensure base directory exists
         ENVIRONMENTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -27,6 +30,11 @@ class EnvironmantManager:
         :param role:
         :return:
         """
+        # Check permission
+        self.auth.check("create_env")
+
+        plugin_manager.trigger("pre_create_env", env_name=env_name, role=role)
+
         env_path = ENVIRONMENTS_DIR / f"{env_name}.yaml"
 
         if env_path.exists():
@@ -40,8 +48,13 @@ class EnvironmantManager:
             packages=[],  # User will install packages later
         )
 
-        save_yaml(env_path, env_data.dict())
+        save_yaml(env_path, env_data.model_dump())
         logger.success(f"Environment '{env_name}' created successfully!")
+
+        # Audit log it
+        log("create_env", self.auth.current_user(), env_name, details=f"role={role}")
+
+        plugin_manager.trigger("post_create_env", env_name=env_name, role=role)
 
     def activate_environment(self, env_name: str):
         """
@@ -49,6 +62,8 @@ class EnvironmantManager:
         :param env_name:
         :return:
         """
+        # No strict permission needed for activation
+        self.auth.check("activate_env")  # You can allow all to activate
 
         env_file = ENVIRONMENTS_DIR / f"{env_name}.yaml"
         if not env_file.exists():
@@ -87,6 +102,9 @@ class EnvironmantManager:
         logger.info(f"Packages Loaded: {', '.join(package_list) if package_list else 'None'}")
         logger.info(f"Python Interpreter: {interpreter_path}")
 
+        # Audit log
+        log("activate_env", self.auth.current_user(), env_name)
+
     def deactivate_environment(self):
         """
         Deactivate the currently active environment
@@ -95,21 +113,48 @@ class EnvironmantManager:
         reset_environment_variables()
         logger.info("Environment variables reset to system defaults.")
 
-    def list_environments(self):
+    def list_environments(self, return_data: bool = False) -> List[Dict[str, Any]] | None:
         """
-        List all available enviroments.
-        :return:
+        If return_data is False: print env names to console (old behaviour).
+        If return_data is True: return a list of dicts with keys:
+            - name: str
+            - role: str
+            - created_at: str
         """
+        env_dir = Path(ENVIRONMENTS_DIR)
+        all_files = sorted(env_dir.glob("*.yaml"))
+        # Filter our lockfiles
+        env_files = [f for f in all_files if not f.name.endswith(".lock.yaml")]
 
-        envs = [f.stem for f in ENVIRONMENTS_DIR.glob("*.yaml")]
+        if return_data:
+            result = []
+            for f in env_files:
+                data = load_yaml(f)
+                result.append({
+                    "name": data.get("name", f.stem),
+                    "role": data.get("role", "custom"),
+                    "created_at": data.get("created_at", "")
+                })
+            return result
 
-        if not envs:
-            logger.warning("No environments created yet.")
+        # Old CLI behavior
+        if not env_files:
+            logger.warning("No environments found.")
             return
 
         logger.title("Available Environments")
-        for env in envs:
-            logger.info(f"- {env}")
+        for f in env_files:
+            logger.info(f"- {f.stem}")
+
+    def get_environment(self, env_name: str) -> Dict[str, Any]:
+        """
+        Load and return the full YAML for the named environment.
+        Raises FileNotFoundError if missing.
+        """
+        env_file = Path(ENVIRONMENTS_DIR) / f"{env_name}.yaml"
+        if not env_file.exists():
+            raise FileNotFoundError(f"Environment '{env_name}' not found.")
+        return load_yaml(env_file)
 
     def lock_environment(self, env_name: str):
         """
@@ -128,3 +173,91 @@ class EnvironmantManager:
 
         save_yaml(lockfile_path, env_data)
         logger.success(f"Lockfile created: {lockfile_path}")
+
+    def diff_environments(self, env_a: str, env_b: str) -> None:
+        """
+        Print the differences in packages and role between two environments.
+        :param env_a:
+        :param env_b:
+        :return:
+        """
+        env_dir = ENVIRONMENTS_DIR
+        file_a = env_dir / f"{env_a}.yaml"
+        file_b = env_dir / f"{env_b}.yaml"
+
+        if not file_a.exists():
+            logger.error(f"Environment '{env_a}' not found at {file_a}")
+            return
+        if not file_b.exists():
+            logger.error(f"Environment '{env_b}' not found at {file_b}")
+            return
+
+        data_a = load_yaml(file_a)
+        data_b = load_yaml(file_b)
+
+        pkgs_a = set(data_a.get("packages", []))
+        pkgs_b = set(data_b.get("packages", []))
+
+        added = pkgs_b - pkgs_a
+        removed = pkgs_a - pkgs_b
+
+        logger.title(f"Diff: {env_a} -> {env_b}")
+
+        if added:
+            logger.success("Packages Added:")
+            for pkg in sorted(added):
+                logger.success(f"    + {pkg}")
+        else:
+            logger.info("No packages added.")
+
+        if removed:
+            logger.warning("Packages Removed:")
+            for pkg in sorted(removed):
+                logger.warning(f"    - {pkg}")
+        else:
+            logger.info("No packages removed.")
+
+        role_a = data_a.get("role", "custom")
+        role_b = data_b.get("role", "custom")
+        if role_a != role_b:
+            logger.info(f"Role changed: {role_a} -> {role_b}")
+        else:
+            logger.info(f"Role unchanged: {role_a }")
+
+    def export_env_file(self, env_name: str, output_path: Optional[str] = None) -> str:
+        """
+        Export the activation environment variables for `env_name` into a dotenv file.
+        If `output_path` is provided, writes to the file; otherwise returns the content.
+        """
+        # Ensure environment exists and load base data
+        env_file = Path(ENVIRONMENTS_DIR) / f"{env_name}.yaml"
+        if not env_file.exists():
+            raise FileNotFoundError(f"Environment '{env_name}' not found.")
+
+        # Merge package env-vars
+        data = load_yaml(env_file)
+        pkg_vars = []
+        # Compose package_env_vars
+        pm = PackageManager()
+        pkg_list = data.get("packages", [])
+        pkg_vars_dict = pm.resolve_package_env_vars(pkg_list)
+
+        # Also include NEXON_ENV
+        pkg_vars_dict["NEXON_ENV"] = env_name
+
+        # Generate dotenv content
+        lines = []
+        for key, val in pkg_vars_dict.items():
+            # quote values containing spaces or path separators
+            if " " in val:
+                val = f'"{val}"'
+            lines.append(f"{key}={val}")
+
+        content = "\n".join(lines) + "\n"
+
+        if output_path:
+            with open(output_path, "w", encoding="utf-8") as f:
+                f.write(content)
+            return output_path
+        else:
+            return content

@@ -1,0 +1,10 @@
+# overrides for the 'fx' team
+role: fx
+packages:
+  - maya-2025.2
+  - arnold-7.0.0
+env:
+  # FX-specific Maya plugin path
+  MAYA_PLUG_IN_PATH: "{root}/fx/plugins:{MAYA_PLUG_IN_PATH}"
+  # use the studio-wide license server
+  LICENSE_SERVER: "27000@licenseserver.mycompany.com"

@@ -1,0 +1,12 @@
+# Sample environment spec for an animator role
+name: animator-env
+created_at: 2025-04-30T00:00:00Z
+description: "Animator environment with Blender, Maya, and essential tools"
+role: animator
+packages:
+  - maya-2025.2
+  - blender-4.0
+  - mytool-0.1.0
+env:
+  PATH: "/usr/local/blender:/usr/autodesk/maya/bin:{PATH}"
+  PYTHONPATH: "/home/user/.nexon/packages/mytool/0.1.0/src:{PYTHONPATH}"

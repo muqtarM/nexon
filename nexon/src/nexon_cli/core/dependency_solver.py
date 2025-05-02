@@ -3,7 +3,9 @@ from pathlib import Path
 from collections import defaultdict, deque
 from typing import Dict, List, Optional, Tuple
 
-from packaging import version as pkg_version
+from packaging.version import Version, InvalidVersion
+from packaging.specifiers import SpecifierSet, InvalidSpecifier
+from packaging.requirements import Requirement, InvalidRequirement
 
 from nexon_cli.utils.logger import logger
 from nexon_cli.utils.file_ops import load_yaml
@@ -20,43 +22,37 @@ class DependencySolver:
     Resolve package dependencies, including semantic version ranges, and detect conflicts.
     """
     def __init__(self):
-        self.pkg_defs: Dict[str, List[str]] = {}  # name -> list of available versions (sorted)
-        self._load_definitions()
+        self.packages_dir = PACKAGES_DIR
+        self._definitions: dict[str, dict[str, dict]] = {}
 
-    def _load_definitions(self):
+    def _load_definitions(self) -> dict[str, dict[str, dict]]:
         """Load all package specs from PACKAGES_DIR."""
-        base = PACKAGES_DIR
-        if not base.exists():
-            logger.warning(f"Packages directory not found: {base}")
-            return
+        if self._definitions:
+            return self._definitions
 
-        for pkg_dir in base.iterdir():
+        defs: dict[str, dict[str, dict]] = {}
+        for pkg_dir in self.packages_dir.iterdir():
             if not pkg_dir.is_dir():
                 continue
             name = pkg_dir.name
-            versions = []
+            defs[name] = {}
             for ver_dir in pkg_dir.iterdir():
+                if not ver_dir.is_dir():
+                    continue
                 pkg_file = ver_dir / "package.yaml"
-                if pkg_file.exists():
-                    try:
-                        data = load_yaml(pkg_file)
-                        ver = data.get("version")
-                        if ver:
-                            versions.append(ver)
-                    except Exception as e:
-                        logger.warning(f"Failed to load {pkg_file}: {e}")
-            # Sort descending
-            try:
-                sorted_versions = sorted(
-                    versions,
-                    key=lambda v: pkg_version.parse(v),
-                    reverse=True
-                )
-                self.pkg_defs[name] = sorted_versions
-            except Exception as e:
-                logger.error(f"Error sorting versions for {name}: {e}")
+                if not pkg_file.exists():
+                    continue
+                data = load_yaml(pkg_file)
+                vers = data.get("version")
+                if not vers:
+                    logger.warning(f"No version field in {pkg_file}, skipping.")
+                    continue
+                defs[name][vers] = data
 
-    def parse_requirement(self, req: str) -> Tuple[str, Optional[str]]:
+        self._definitions = defs
+        return defs
+
+    def parse_requirement(self, req: str):
         """
         Parse requirement specifier into package name and version constraint.
         Supports:
@@ -67,68 +63,121 @@ class DependencySolver:
         :param req:
         :return:
         """
-        # Range spec: look for comparison operators
-        m = re.match(r"^([a-zA-Z0-9_\-]+)([><=!].+)$", req)
-        if m:
-            name, constraint = m.group(1), m.group(2)
-            return name, constraint
-        # Exact version with dash
-        if '-' in req:
-            parts = req.rsplit('-', 1)
-            if len(parts) == 2 and re.match(r"^\d+\.\d+.*", parts[1]):
-                return parts[0], f"=={parts[1]}"
-        # No spec
-        return req, None
+        exact = re.match(r"^([A-Za-z0-9_.]+)-(\d+(?:\.\d+)*)$", req)
+        if exact:
+            # Exact version shorthand: foo-1.2.3
+            name, vers = exact.group(1), exact.group(2)
+            try:
+                Version(vers)
+            except InvalidVersion:
+                raise DependencyError(f"Invalid version in exact requirement: {req}")
+            return name, SpecifierSet(f"=={vers}")
 
-    def resolve(self, requirements: list[str]) -> list[str]:
+        # # 2) PEP 508 / packaging.Requirement
+        # try:
+        #     requirement = Requirement(req)
+        # except InvalidRequirement as e:
+        #     raise DependencyError(f"Invalid requirement '{req}': {e}")
+        # return requirement.name, requirement.specifier
+
+        # 2) Range spec: find first operator position
+        ops = ["==", ">=", "<=", "~=", "!=", ">", "<"]
+        pos = len(req)
+        for op in ops:
+            idx = req.find(op)
+            if idx != -1 and idx < pos:
+                pos = idx
+        if pos < len(req):
+            name = req[:pos]
+            spec = req[pos:]
+            try:
+                spec_set = SpecifierSet(spec)
+            except InvalidSpecifier as e:
+                raise DependencyError(f"Invalid version specifier '{spec}' in '{req}': {e}")
+            return name, spec_set
+
+        # 3) No version part
+        return req, SpecifierSet()
+
+    def list_versions(self, name: str) -> List[Version]:
+        """
+        List all sort available versions from the cached definitions.
+        :param name:
+        :return:
+        """
+        defs = self._load_definitions()
+        if name not in defs:
+            raise DependencyError(f"Package '{name}' not found")
+        versions = []
+        for ver_str in defs[name]:
+            try:
+                versions.append(Version(ver_str))
+            except InvalidVersion:
+                logger.warning(f"Ignoring invalid version '{ver_str}' for package '{name}'")
+        return sorted(versions, reverse=True)
+
+    def resolve(self, req: str) -> str:
         """
         Resolve a list of requirements into exact versions, handling ranges.
         Returns list of 'pkg-version'. Raises on conflict or missing.
+        :param req:
+        :return:
+        """
+        name, spec = self.parse_requirement(req)
+        # available = self.list_versions(name)
+        # for v in available:
+        #     if v in spec:
+        #         return f"{name}-{v}"
+        # # No match found
+        # raise DependencyError(f"No version of '{name}' matches specifier '{spec}'")
+        defs = self._load_definitions()
+
+        if name not in defs:
+            raise DependencyError(f"Package '{name}' not found")
+
+        # Gather and sort all available versions
+        available = []
+        for vers_str in defs[name]:
+            try:
+                available.append(Version(vers_str))
+            except InvalidVersion:
+                logger.warning(f"Ignoring invalid version '{vers_str}' for '{name}'")
+        available.sort(reverse=True)
+
+        # Pick the first one that satisfies
+        for v in available:
+            if v in spec:
+                return f"{name}-{v}"
+        raise DependencyError(f"No version of '{name}' matches specifier '{spec}'")
+
+    def resolve_all(self, requirements: list[str]) -> list[str]:
+        """
+        Resolve multiple requirements (including transitive 'requires') into
+        a flat list of exact package-version strings.
         :param requirements:
         :return:
         """
-        resolved = {}
-        for req in requirements:
-            name, constraint = self.parse_requirement(req)
-            if name not in self.pkg_defs:
-                msg = f"Unknown package '{name}'"
-                logger.error(msg)
-                raise DependencyError(msg)
-            candidates = self.pkg_defs[name]
-            if not candidates:
-                msg = f"No versions available for '{name}'"
-                logger.error(msg)
-                raise DependencyError(msg)
+        defs = self._load_definitions()
+        resolved = set()
+        to_process = list(requirements)
 
-            chosen = None
-            if constraint:
-                # Evaluate each candidate against the constraint
-                for ver in candidates:
-                    expr = f"pkg_version.parse('{ver}'){constraint}"
-                    try:
-                        if eval(expr):  # constraint like '>=1.2,<2.0'
-                            chosen = ver
-                            break
-                    except Exception:
-                        continue
-                if not chosen:
-                    msg = f"No versions of '{name}' match '{constraint}'"
-                    logger.error(msg)
-                    raise DependencyError(msg)
-            else:
-                # No constraint: pick latest
-                chosen = candidates[0]
+        while to_process:
+            req = to_process.pop(0)
+            pkgver = self.resolve(req)
+            if pkgver in resolved:
+                continue
+            resolved.add(pkgver)
 
-            # Check for conflicts
-            if name in resolved and resolved[name] != chosen:
-                msg = f"Version conflict for '{name}': {resolved[name]} vs {chosen}"
-                logger.error(msg)
-                raise DependencyError(msg)
+            # Load that package's own requires
+            name, vers = pkgver.split("-", 1)
+            meta = defs[name].get(vers)
+            for dep in meta.get("requires", []):
+                # Only enqueue if we haven't already resolved it
+                if self.resolve(dep) not in resolved:
+                    to_process.append(dep)
 
-            resolved[name] = chosen
-
-        # Build list of 'name-version'
-        return [f"{n}-{v}" for n, v in resolved.items()]
+        # Return sorted for consistency
+        return sorted(resolved)
 
     def build_graph(self, requirements: List[str]) -> Dict[str, List[str]]:
         """
@@ -137,39 +186,27 @@ class DependencySolver:
         :param requirements:
         :return:
         """
-        topo_graph: Dict[str, List[str]] = defaultdict(list)
-        queue = deque()
-        visited = set()
-
-        # Resolve initial requirements
-        try:
-            initial = self.resolve(requirements)
-        except DependencyError as e:
-            raise
-
-        for pkgver in initial:
-            queue.append(pkgver)
+        defs = self._load_definitions()
+        graph: Dict[str, List[str]] = {}
+        queue = list(requirements)
 
         while queue:
-            node = queue.popleft()
-            if node in visited:
+            req = queue.pop(0)
+            pkgver = self.resolve(req)
+            if pkgver in graph:
                 continue
-            visited.add(node)
-            name, ver = node.rsplit('-', 1)
-            pkg_file = PACKAGES_DIR / name / ver / "package.yaml"
-            if not pkg_file.exists():
-                logger.warning(f"Missing spec for '{node}' at {pkg_file}")
-                continue
-            data = load_yaml(pkg_file)
-            deps = data.get("requires", [])
-            try:
-                child_nodes = self.resolve(deps)
-            except DependencyError as e:
-                logger.error(f"Failed to resolve children of '{node}': {e}")
-                raise
-            topo_graph[node] = child_nodes
-            for child in child_nodes:
-                if child not in visited:
-                    queue.append(child)
 
-        return dict(topo_graph)
+            name, vers = pkgver.split("-", 1)
+            meta = defs[name][vers]
+            direct = meta.get("requires", [])
+
+            # Resolve direct dependencies to exact versions
+            resolved_direct = []
+            for dep in direct:
+                dep_pkgver = self.resolve(dep)
+                resolved_direct.append(dep_pkgver)
+                queue.append(dep)  # ensure we process dependencies of dependencies
+
+            graph[pkgver] = resolved_direct
+
+        return graph

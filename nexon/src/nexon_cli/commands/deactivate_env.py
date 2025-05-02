@@ -1,5 +1,5 @@
 import typer
-from nexon_cli.core.env_manager import EnvironmantManager
+from nexon_cli.core.env_manager import EnvironmentManager
 
 
 def deactivate_env():
@@ -7,5 +7,5 @@ def deactivate_env():
     Activate an environment
     :return:
     """
-    em = EnvironmantManager()
+    em = EnvironmentManager()
     em.deactivate_environment()

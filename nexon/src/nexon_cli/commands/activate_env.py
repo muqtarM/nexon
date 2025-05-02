@@ -1,5 +1,5 @@
 import typer
-from nexon_cli.core.env_manager import EnvironmantManager
+from nexon_cli.core.env_manager import EnvironmentManager
 
 
 def activate_env(env_name: str):
@@ -8,5 +8,5 @@ def activate_env(env_name: str):
     :param env_name:
     :return:
     """
-    em = EnvironmantManager()
+    em = EnvironmentManager()
     em.activate_environment(env_name)

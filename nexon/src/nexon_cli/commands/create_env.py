@@ -1,5 +1,5 @@
 import typer
-from nexon_cli.core.env_manager import EnvironmantManager
+from nexon_cli.core.env_manager import EnvironmentManager
 
 
 def create_env(env_name: str, role: str = typer.Option(None, help="Role template(e.g., animator, game-dev, vp)")):
@@ -9,5 +9,5 @@ def create_env(env_name: str, role: str = typer.Option(None, help="Role template
     :param role:
     :return:
     """
-    em = EnvironmantManager()
+    em = EnvironmentManager()
     em.create_environment(env_name, role)

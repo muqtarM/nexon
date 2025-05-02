@@ -1,0 +1,15 @@
+# Sample package.yaml for a Python utility tool
+name: mytool
+version: 0.1.0
+description: "Example Python utility for asset validation"
+requires: []
+env:
+  PATH: "{root}/bin:{PATH}"
+  PYTHONPATH: "{root}/src:{PYTHONPATH}"
+build:
+  commands:
+    - cd {root}/src && pip install .
+commands:
+  run: "{root}/bin/mytool --help"
+bin:
+  - "{root}/bin/mytool"

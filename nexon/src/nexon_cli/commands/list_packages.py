@@ -8,4 +8,12 @@ def list_packages():
     :return:
     """
     pm = PackageManager()
-    pm.list_packages()
+    packages = pm.list_packages()
+    if not packages:
+        typer.echo(f"[yellow]No packages found[/yellow]")
+        return
+    for name, vers in packages.items():
+        typer.secho(f"    + {name}", fg="green")
+        for v in vers:
+            typer.secho(f"        + {v}", fg="green")
+        typer.secho()

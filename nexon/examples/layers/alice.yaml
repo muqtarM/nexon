@@ -1,0 +1,8 @@
+# personal overrides for user 'alice'
+role: custom
+packages:
+  - personal-scripts-0.2.5
+env:
+  # Alice’s personal helper scripts
+  PYTHONPATH: "/home/alice/.nexon/user/alice/scripts:{PYTHONPATH}"
+  EDITOR: "vim"

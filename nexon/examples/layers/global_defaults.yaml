@@ -1,0 +1,9 @@
+# global defaults for all environments in the studio
+role: default
+packages:
+  - common-tools-1.0.0
+  - logging-framework-2.3.1
+env:
+  # prepend a shared bin/ and lib/ to every PATH/LD_LIBRARY_PATH
+  PATH: "{root}/common/bin:{PATH}"
+  LD_LIBRARY_PATH: "{root}/common/lib:{LD_LIBRARY_PATH}"

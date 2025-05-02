@@ -1,5 +1,5 @@
 import typer
-from nexon_cli.core.env_manager import EnvironmantManager
+from nexon_cli.core.env_manager import EnvironmentManager
 
 
 def list_envs():
@@ -7,5 +7,5 @@ def list_envs():
     List all available environments.
     :return:
     """
-    em = EnvironmantManager()
+    em = EnvironmentManager()
     em.list_environments()

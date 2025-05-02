@@ -1,17 +1,18 @@
 import typer
-from typing import Optional
-from nexon_cli.core.build_manager import build_manager
+from nexon_cli.core.docker_builder import build_docker_image, DockerBuildError
 
 
-def build_docker(
-        env_name: str,
-        tag: Optional[str] = typer.Option(None, help="Docker image tag (default: nexon/<env_name>:latest")
+def build_docker_cmd(
+        env_name: str = typer.Argument(..., help="Name of the environment to containerize"),
+        tag: str = typer.Option(None, "--tag", "-t", help="Optional Docker image tag")
 ):
     """
     Build a Docker image for the specified environment.
     """
     try:
-        build_manager.build_docker_image(env_name, tag)
-    except Exception as e:
-        typer.secho(f"Error building Docker for '{env_name}': {e}", fg="red")
+        image = build_docker_image(env_name, tag)
+    except DockerBuildError as e:
+        typer.secho(f"Docker build failed: {e}", fg="red")
         raise typer.Exit(1)
+    else:
+        typer.secho(f"Docker image built: {image}", fg="green")

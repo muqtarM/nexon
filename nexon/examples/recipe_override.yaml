@@ -1,0 +1,8 @@
+# Sample recipe to add SubTools to animator base env
+name: animator-extended
+base_environment: animator-env
+overrides:
+  - subttools-2.0.0
+  - subttools-plugins-2.0.0
+env:
+  SUBT_PATH: "{root}/subttools/data:{SUBT_PATH}"
