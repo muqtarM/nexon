@@ -1,1 +1,3 @@
 .venv
+nexon/src/nexon_cli/__pycache__
+nexon/UNKNOWN.egg-info
