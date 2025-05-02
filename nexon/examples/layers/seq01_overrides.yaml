@@ -1,0 +1,9 @@
+# overrides for the 'seq01' project
+role: seq01
+packages:
+  - shot-tools-3.1.0
+env:
+  # point to the current project directory
+  PROJECT_DIR: "/projects/seq01"
+  # add project-specific scripts
+  PYTHONPATH: "/projects/seq01/scripts:{PYTHONPATH}"

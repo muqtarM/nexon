@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel", "build"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nexon"
+version = "1.0.0"         # bumped by bump-version
+description = "Next-gen multimedia environment manager"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+  "typer",
+  "packaging",
+  "PyYAML",
+  # ...
+]
+
+[project.scripts]
+nexon = "nexon_cli.cli:app"

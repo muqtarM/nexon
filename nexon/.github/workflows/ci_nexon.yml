@@ -1,0 +1,31 @@
+name: Nexon CI
+
+on:
+  workflow_dispatch:
+    inputs:
+      env:
+        description: 'Environment name'
+        required: true
+      script:
+        description: 'Script to execute'
+        required: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Install Nexon CLI
+        run: pip install nexon
+
+      - name: Trigger Nexon CI
+        run: |
+          nexon ci-run ${{ github.event.inputs.env }} ${{ github.event.inputs.script }}
