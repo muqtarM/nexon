@@ -1,0 +1,101 @@
+name: E2E CI Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_DB: nexon
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # make sure the CLI sees this
+      JWT_SECRET: testsecret
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # assumes you have a [dev] extra including pytest, alembic, uvicorn, etc.
+          pip install -e .[dev]
+
+      - name: Wait for Postgres
+        run: |
+          until pg_isready -h localhost -p 5432 -U postgres; do
+            echo "Waiting for Postgres…"
+            sleep 1
+          done
+
+      - name: Export DATABASE_URL
+        run: echo "DATABASE_URL=postgresql://postgres:postgres@localhost:5432/nexon" >> $GITHUB_ENV
+
+      - name: Run Alembic Migrations
+        run: alembic upgrade head
+
+      - name: CLI Smoke Tests
+        run: |
+          # basic CLI operations
+          nexon create-env smoke_env --role tester
+          nexon list-envs | grep smoke_env
+          nexon create-package smoke_pkg --version 0.1.0
+          nexon list-packages | grep smoke_pkg
+
+      - name: Start API Server
+        run: |
+          uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+          # give it a moment to boot
+          sleep 5
+
+      - name: API Smoke Tests
+        run: |
+          # a minimal pytest file (e.g. tests/test_api_smoke.py) should exist
+          pytest tests/test_api_smoke.py -q
+
+      - name: End-to-End CLI+API Tests
+        run: |
+          # example: install-package, lock-env, diff-env
+          # create a dummy package for this
+          mkdir -p ~/.nexon/packages/DUMMY/1.2.3
+          cat > ~/.nexon/packages/DUMMY/1.2.3/package.yaml <<EOF
+          name: DUMMY
+          version: 1.2.3
+          requires: []
+          env: {}
+          build: {}
+          commands: {}
+          EOF
+
+          nexon install-package smoke_env DUMMY-1.2.3
+          nexon lock-env smoke_env
+          nexon diff-env smoke_env smoke_env.lock
+
+      - name: Tear Down Server
+        if: always()
+        run: |
+          # kill backgrounded uvicorn
+          pkill -f "uvicorn app.main:app" || true

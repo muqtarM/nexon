@@ -83,6 +83,42 @@ class NexonConfig:
         """Directory containing per-user layer YAMLs."""
         return self.layers_dir / "user"
 
+    @property
+    def shotgrid_url(self) -> str | None:
+        return os.environ.get("SHOTGRID_URL")
+
+    @property
+    def shotgrid_script(self) -> str | None:
+        return os.environ.get("SHOTGRID_SCRIPT")
+
+    @property
+    def shotgrid_key(self) -> str | None:
+        return os.environ.get("SHOTGRID_KEY")
+
+    @property
+    def p4_port(self) -> str | None:
+        return os.environ.get("P4_PORT")
+
+    @property
+    def p4_user(self) -> str | None:
+        return os.environ.get("P4_USER")
+
+    @property
+    def p4_client(self) -> str | None:
+        return os.environ.get("P4_CLIENT")
+
+    @property
+    def telemetry_url(self) -> str | None:
+        return os.environ.get("TELEMETRY_URL")
+
+    @property
+    def telemetry_api_key(self) -> str | None:
+        return os.environ.get("TELEMETRY_API_KEY")
+
+    @property
+    def telemetry_enabled(self) -> bool:
+        return os.environ.get("TELEMETRY_ENABLED", False)
+
 
 # Singleton instance for import across Nexon modules
 config = NexonConfig()

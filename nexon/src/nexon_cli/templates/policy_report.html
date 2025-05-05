@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Compliance Report: {{ env }}</title>
+  <style>
+    body {font-family:sans-serif; padding:2rem;}
+    h1 {margin-bottom:1rem;}
+    table {width:100%; border-collapse:collapse;}
+    th,td {padding:0.5rem; border:1px solid #ccc;}
+    th {background:#f0f0f0;}
+  </style>
+</head>
+<body>
+  <h1>Compliance Report for "{{ env }}"</h1>
+  {% if violations %}
+    <table>
+      <tr><th>Rule</th><th>Description</th><th>Details</th></tr>
+      {% for v in violations %}
+      <tr>
+        <td>{{ v.rule_id }}</td>
+        <td>{{ v.description }}</td>
+        <td>{{ v.details or "" }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  {% else %}
+    <p style="color:green;">✔ No violations found.</p>
+  {% endif %}
+</body>
+</html>

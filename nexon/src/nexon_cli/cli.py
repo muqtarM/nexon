@@ -16,7 +16,7 @@ from nexon_cli.commands.uninstall_package import uninstall_package
 from nexon_cli.commands.list_envs import list_envs
 from nexon_cli.commands.list_packages import list_packages
 from nexon_cli.commands.detect_hardware import detect_hardware
-# from nexon_cli.commands.launch_app import launch_app
+from nexon_cli.commands.launch_app import launch_app
 
 # Workspace commands
 from nexon_cli.commands.workspace_create import workspace_create
@@ -51,6 +51,26 @@ from nexon_cli.commands.bump_version import bump_version
 from nexon_cli.commands.build_release import build_release
 
 from nexon_cli.commands.security_scan import security_scan
+
+from nexon_cli.commands.shot_context import shot_context_cmd
+from nexon_cli.commands.p4_sync import p4_sync_cmd
+
+from nexon_cli.commands.cluster_deploy import cluster_deploy
+from nexon_cli.commands.cluster_destroy import cluster_destroy
+from nexon_cli.commands.cluster_list import cluster_list
+
+from nexon_cli.commands.cluster_expose import cluster_expose
+from nexon_cli.commands.cluster_autoscale import cluster_autoscale
+from nexon_cli.commands.cluster_unautoscale import cluster_unautoscale
+
+from nexon_cli.commands.policy_validate import policy_validate
+from nexon_cli.commands.policy_report import policy_report
+
+from nexon_cli.commands.backup_all import backup_all_cmd
+from nexon_cli.commands.restore_backup import restore_cmd
+from nexon_cli.commands.backup_schedule import backup_schedule_cmd
+
+from nexon_cli.commands.run import run_cmd
 
 cli = typer.Typer(help="Nexon: Next-Gen Multimedia Environment Manager")
 
@@ -98,6 +118,28 @@ cli.command(name="bump-version")(bump_version)
 cli.command(name="build-release")(build_release)
 
 cli.command(name="security-scan")(security_scan)
+
+cli.command(name="shot-context")(shot_context_cmd)
+cli.command(name="p4-sync")(p4_sync_cmd)
+
+cli.command(name="cluster-deploy")(cluster_deploy)
+cli.command(name="cluster-destroy")(cluster_destroy)
+cli.command(name="cluster-list")(cluster_list)
+
+cli.command(name="cluster-expose")(cluster_expose)
+
+cli.command(name="cluster-autoscale")(cluster_autoscale)
+cli.command(name="cluster-unautoscale")(cluster_unautoscale)
+
+cli.command(name="policy-validate")(policy_validate)
+cli.command(name="policy-report")(policy_report)
+
+cli.command(name="backup-all")(backup_all_cmd)
+cli.command(name="restore")(restore_cmd)
+cli.command(name="backup-schedule")(backup_schedule_cmd)
+cli.command(name="launch-app")(launch_app)
+
+cli.command(name="run")(run_cmd)
 
 # Entry point
 if __name__ == '__main__':

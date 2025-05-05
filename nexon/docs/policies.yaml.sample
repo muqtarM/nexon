@@ -1,0 +1,18 @@
+# docs/policies.yaml.sample
+
+disallowed_packages:
+  - insecure-tool
+min_versions:
+  - package: corelib
+    version: "2.1.0"
+assert:
+  - id: env_role_prod
+    path: "role"
+    op: "eq"
+    value: "prod"
+    desc: "Environment role must be 'prod'"
+  - id: has_license_key
+    path: "env.LICENSE_KEY"
+    op: "regex"
+    value: "^KEY-[A-Z0-9]{16}$"
+    desc: "License key must match pattern"

@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+psycopg2-binary     # or your DB driver
+python-jose[cryptography]   # for JWT
+passlib[bcrypt]     # for password hashing
+python-dotenv       # for local .env loading
+ldap3               # for LDAP SSO if needed
