@@ -34,7 +34,7 @@ def launch_app(
     """
     # 1) Optionally open the default browser after a short delay
     if not no_browser:
-        url = f"http://{host}:{port}"
+        url = f"http://{host}:{port}/static/index.html"
         def _open():
             sleep(1.5)
             webbrowser.open(url)

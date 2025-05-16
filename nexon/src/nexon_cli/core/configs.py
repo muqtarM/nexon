@@ -119,6 +119,14 @@ class NexonConfig:
     def telemetry_enabled(self) -> bool:
         return os.environ.get("TELEMETRY_ENABLED", False)
 
+    @property
+    def server_url(self) -> str:
+        return os.environ.get("NEXON_SERVER_URL", "")
+
+    @property
+    def cli_token(self) -> str:
+        return os.environ.get("NEXON_CLI_TOKEN", "")
+
 
 # Singleton instance for import across Nexon modules
 config = NexonConfig()

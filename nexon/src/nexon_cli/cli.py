@@ -72,6 +72,18 @@ from nexon_cli.commands.backup_schedule import backup_schedule_cmd
 
 from nexon_cli.commands.run import run_cmd
 
+from nexon_cli.commands.import_pypi import import_pypi
+from nexon_cli.commands.import_wheel import import_wheel
+
+import nexon_cli.commands.plugin as plugin_cmds
+import nexon_cli.commands.token as token_cmds
+import nexon_cli.commands.notify_send as notify_cmds
+import nexon_cli.commands.license as license_cmds
+import nexon_cli. commands.marketplace as marketplace_cmds
+import nexon_cli.commands.pipeline as pipeline_cmds
+import nexon_cli.commands.init as init_cmds
+import nexon_cli.commands.snapshot as snapshot_cmds
+
 cli = typer.Typer(help="Nexon: Next-Gen Multimedia Environment Manager")
 
 # Register commands
@@ -140,6 +152,18 @@ cli.command(name="backup-schedule")(backup_schedule_cmd)
 cli.command(name="launch-app")(launch_app)
 
 cli.command(name="run")(run_cmd)
+
+cli.command(name="import-pypi")(import_pypi)
+cli.command(name="import-wheel")(import_wheel)
+
+cli.add_typer(plugin_cmds.app, name="plugin", help="Manage plugins")
+cli.add_typer(token_cmds.app, name="token", help="Manage API tokens")
+cli.add_typer(notify_cmds.app, name="notify", help="Broadcast real-time toasts")
+cli.add_typer(license_cmds.app, name="license", help="Studio licensing")
+cli.add_typer(marketplace_cmds.app, name="marketplace", help="Browse/install micro-tools")
+cli.add_typer(pipeline_cmds.app, name="pipeline", help="Pipeline template")
+cli.add_typer(init_cmds.app, name="init", help="Quickstart new project")
+cli.add_typer(snapshot_cmds.app, name="snapshot", help="Snapshots (create/list/restore)")
 
 # Entry point
 if __name__ == '__main__':
