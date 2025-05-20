@@ -1,6 +1,7 @@
 import os
 from typing import Optional, Dict, Any
 from kubernetes import client, config as k8s_config
+from kubernetes.client.rest import ApiException
 from nexon_cli.utils.logger import logger
 from kubernetes.client import (
             V1Ingress,
@@ -38,6 +39,7 @@ class ClusterManager:
             k8s_config.load_kube_config()
         self.api = client.CoreV1Api()
         self.apps = client.AppsV1Api()
+        self.net = client.NetworkingV1Api()
 
     def deploy(self,
                env_name: str,
@@ -119,6 +121,32 @@ class ClusterManager:
 
         logger.info(f"{action} Deployment & Service for '{env_name}' in namespace '{ns}'")
         return {"namespace": ns, "image": img, "replicas": replicas}
+
+    def expose(self, name: str, host: str, path: str):
+        # Create or replace an Ingress
+        backend = V1IngressBackend(
+            service=V1IngressServiceBackend(
+                name=name,
+                port=V1ServiceBackendPort(number=80)
+            )
+        )
+        path_obj = V1HTTPIngressPath(path=path, backend=backend)
+        rule = V1IngressRule(host=host, http=V1HTTPIngressRuleValue(paths=[path_obj]))
+        spec = V1IngressSpec(rules=[rule])
+        ingress = V1Ingress(
+            api_version="networking.k8s.io/v1",
+            kind="Ingress",
+            metadata=V1ObjectMeta(name=name),
+            spec=spec
+        )
+
+        try:
+            self.net.create_namespaced_ingress(namespace="default", body=ingress)
+        except ApiException as e:
+            if e.status == 409:
+                self.net.replace_namespaced_ingress(name=name, namespace="default", body=ingress)
+            else:
+                raise ClusterError(e)
 
     def destroy(self, env_name: str, namespace: Optional[str] = None):
         ns = namespace or env_name

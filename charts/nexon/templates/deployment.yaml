@@ -1,0 +1,25 @@
+# charts/nexon/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "nexon.fullname" . }}-api
+spec:
+  replicas: {{ .Values.api.replicas }}
+  selector:
+    matchLabels:
+      app: {{ include "nexon.name" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "nexon.name" . }}
+    spec:
+      containers:
+        - name: api
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          readinessProbe:
+            httpGet: { path: "/health", port: 8000 }
+          env:
+            - name: NEXON_ENV
+              value: production
+            - name: LEADER_ELECTION_LOCK_NAME
+              value: "nexon-notif-lock"

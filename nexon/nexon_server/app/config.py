@@ -6,7 +6,7 @@
 from pydantic_settings import BaseSettings
 
 from typing import Optional
-from pydantic import Field
+from app.core.vault_client import VaultClient, VaultClientError
 
 
 class Settings(BaseSettings):
@@ -33,4 +33,18 @@ class Settings(BaseSettings):
         case_sensitive = True
 
 
-settings = Settings()
+def load_settings() -> Settings:
+    # 1) Load initial from .env / envvars
+    settings = Settings()
+    # 2) Optionally overlay Vault secrets
+    try:
+        vc = VaultClient()
+        for key, val in vc.get_secret("nexon/app").items():
+            setattr(settings, key, val)
+    except VaultClientError:
+        # no Vault integration in lower envs
+        pass
+    return settings
+
+
+settings = load_settings()

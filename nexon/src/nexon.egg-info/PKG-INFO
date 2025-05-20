@@ -1,0 +1,16 @@
+Metadata-Version: 2.4
+Name: nexon
+Version: 1.1.0
+Summary: Next-gen multimedia environment manager
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+Requires-Dist: typer
+Requires-Dist: packaging
+Requires-Dist: PyYAML
+Requires-Dist: wheel-inspect
+Requires-Dist: cryptography
+Requires-Dist: jinja2
+Requires-Dist: fastapi[all]
+Requires-Dist: uvicorn
+Requires-Dist: sentry-sdk
+Requires-Dist: prometheus-client

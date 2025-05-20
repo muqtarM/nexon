@@ -1,0 +1,10 @@
+typer
+packaging
+PyYAML
+wheel-inspect
+cryptography
+jinja2
+fastapi[all]
+uvicorn
+sentry-sdk
+prometheus-client

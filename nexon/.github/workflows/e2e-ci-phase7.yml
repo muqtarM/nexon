@@ -1,0 +1,167 @@
+name: “E2E CI – Phase 7+ Validation”
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_DB: nexon
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      JWT_SECRET: testsecret
+      NEXON_CLI_TOKEN: ""         # will be set after server launch
+      TPN_MODE: "false"           # disable TPN for CI
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+
+      - name: Wait for Postgres
+        run: |
+          until pg_isready -h localhost -p 5432 -U postgres; do
+            echo "Waiting for Postgres…"
+            sleep 1
+          done
+
+      - name: Export DATABASE_URL
+        run: echo "DATABASE_URL=postgresql://postgres:postgres@localhost:5432/nexon" >> $GITHUB_ENV
+
+      - name: Run Alembic migrations
+        run: alembic upgrade head
+
+      - name: Start API server
+        run: |
+          uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+          sleep 5
+
+      - name: Create admin API token
+        run: |
+          # assume initial user has admin role and can create tokens via CLI
+          TOKEN=$(nexon token create -s "*" --expires-in 3600 | grep -Eo '[0-9a-fA-F-]{36}')
+          echo "NEXON_CLI_TOKEN=$TOKEN" >> $GITHUB_ENV
+
+      - name: CLI Smoke Tests – core & Phase 1–5
+        run: |
+          nexon create-env smoke --role dev
+          nexon list-envs | grep smoke
+          nexon create-package pkgA --version 0.1.0
+          nexon list-packages | grep pkgA
+
+      - name: CLI Smoke Tests – Plugins
+        run: |
+          # create a dummy plugin folder
+          mkdir -p plugin_src/my_plugin && echo "name: my_plugin" > plugin_src/my_plugin/plugin.yaml
+          nexon plugin install --path plugin_src/my_plugin
+          nexon plugin list | grep my_plugin
+          nexon plugin uninstall my_plugin
+
+      - name: CLI Smoke Tests – Token & RBAC
+        run: |
+          nexon token list
+          # revoke the token we just listed
+          TOKENS=$(nexon token list | awk '{print $1}')
+          nexon token revoke $TOKENS
+
+      - name: CLI Smoke Tests – Notifications
+        run: |
+          nexon notify send "CI Test" "hello world" --level info
+
+      - name: CLI Smoke Tests – Python Importer
+        run: |
+          # create a dummy wheel file
+          echo "dummy" > dummy-0.1.0.whl
+          nexon import-wheel dummy-0.1.0.whl
+          nexon import-pypi 'requests>=2.28,<3.0' --include-deps
+
+      - name: CLI Smoke Tests – Licensing
+        run: |
+          nexon license issue CIStudio pro -q envs=5 -q builds=10 --days 1
+
+      - name: CLI Smoke Tests – Marketplace
+        run: |
+          # assume marketplace seeded in migrations
+          nexon marketplace list
+
+      - name: CLI Smoke Tests – Pipeline Templates & Init
+        run: |
+          # seed a simple template
+          mkdir -p nexon_templates/basic/files
+          cat > nexon_templates/basic/pipeline.yaml.j2 << 'EOF'
+          files:
+            README.md: |
+              # {{ project_name }}
+          EOF
+          nexon pipeline list-templates | grep basic
+          nexon pipeline init basic project1
+          ls project1/README.md
+
+      - name: CLI Smoke Tests – Quickstart Init
+        run: |
+          nexon init project2 --template basic --no-git
+          test -d project2/.venv
+
+      - name: CLI Smoke Tests – Snapshot Manager
+        run: |
+          nexon snapshot create ci_snap
+          nexon snapshot list | grep ci_snap
+          nexon snapshot restore ci_snap
+
+      - name: CLI Smoke Tests – TPN Compliance
+        run: |
+          # enable TPN mode
+          echo "TPN_MODE=true" >> $GITHUB_ENV
+          # network calls should be blocked
+          if nexon import-pypi 'urllib3>=1.0' ; then
+            echo "TPN violation" && exit 1
+          else
+            echo "TPN mode blocking network OK"
+          fi
+
+      - name: API Smoke Tests
+        run: |
+          # healthcheck, envs, packages, preview endpoints
+          curl -f http://localhost:8000/
+          curl -f -H "Authorization: Bearer $NEXON_CLI_TOKEN" http://localhost:8000/envs
+          curl -f -H "Authorization: Bearer $NEXON_CLI_TOKEN" http://localhost:8000/preview/envs
+
+      - name: Tear down
+        if: always()
+        run: pkill -f "uvicorn app.main:app" || true
+
+      - name: Trivy Scan
+        uses: aquasecurity/trivy-action@v0.6.0
+        with:
+          image-ref: nexon/cli:${{ github.sha }}
+
+      - name: OWASP ZAP Baseline
+        uses: zaproxy/action-baseline@v0.5.0
+        with:
+          target: 'http://localhost:8000'

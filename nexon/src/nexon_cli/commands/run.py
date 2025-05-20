@@ -13,7 +13,7 @@ app = typer.Typer()
 def run_cmd(
     env: str = typer.Argument(..., help="Environment to activate"),
     name: str = typer.Argument(..., help="Command name from package recipes"),
-    extra: list[str] = typer.Argument(None, help="Additional args", nargs=-1)
+    *extra: str  # collects any additional args
 ):
     """
     Activate <env>, look up the '<name>' entry under each package's `commands:`,
@@ -30,9 +30,11 @@ def run_cmd(
 
     # 3) Find the first recipe that defines this command
     cmd_tpl = None
+    pkg_found = None
     for pkg, cmds in recipes.items():
         if name in cmds:
             cmd_tpl = cmds[name]
+            pkg_found = pkg
             break
 
     if not cmd_tpl:
@@ -42,9 +44,10 @@ def run_cmd(
     # 4) Fill in any template fields (e.g. {scene}, {root}, etc.)
     context = {"env": env, **os.environ}
     cmd = cmd_tpl.format(**context)
+    # 5) Append extra args
     if extra:
         cmd += " " + " ".join(shlex.quote(a) for a in extra)
 
-    typer.secho(f"🔧 Running: {cmd}", fg="cyan")
-    # 5) Run the final command in the activated env
+    typer.secho(f"🔧 [{pkg_found}] Running: {cmd}", fg="cyan")
+    # 6) Run it
     subprocess.run(cmd, shell=True, check=True)

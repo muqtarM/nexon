@@ -1,4 +1,5 @@
 import os.path
+import threading
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -12,9 +13,28 @@ from app.routers import (
     preview,
     developer
 )
+from app.core.sentry_integration import wrap_app_with_sentry
+from app.core.metrics_server import setup_metrics
+from app.core.leader_election import LeaderElector
+from app.core.notification_manager import notification_manager
+from app.middleware.security import SecurityHeadersMiddleware
+from app.middleware.tenant_middleware import TenantMiddleware
 from app.config import settings
 
+
+def start_broadcaster():
+    # only active on leader
+    notification_manager.start()
+
+
+elector = LeaderElector(namespace="default", name="nexon-notif-lock", on_started=start_broadcaster)
+threading.Thread(target=elector.run, daemon=True).start()
+
 app = FastAPI(title="Nexon Central API", version="0.1.0")
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(TenantMiddleware)
+app = wrap_app_with_sentry(app)
+setup_metrics(app)
 
 # Mount the 'static' directory under '/static'
 # Adjust the path to point at the sibling 'nexon_web/static' folder:

@@ -10,7 +10,7 @@ class NexonConfig:
     """
     def __init__(self):
         # Base directory for all Nexon data
-        self.base_dir: Path = Path(os.getenv("NEXON_HOME", Path.home() / ".nexon"))
+        self.base_dir: Path = Path(os.getenv("NEXON_BASE_DIR", Path.home() / ".nexon"))
         self._ensure_directory(self.base_dir)
 
         # Ensure core subdirectories

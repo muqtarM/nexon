@@ -139,9 +139,10 @@ class PythonPackageImporter:
         requires = []
         if dist_path.suffix == ".whl":
             info = wheel_inspect.inspect_wheel(dist_path)
-            name = info["metadata"]["Name"]
-            version = info["metadata"]["Version"]
-            requires = info["metadata"].get("Requires-Dist", []) or []
+            print("info", info['dist_info']["metadata"].keys())
+            name = info['dist_info']["metadata"]["name"]
+            version = info['dist_info']["metadata"]["version"]
+            requires = info['dist_info']["metadata"].get("requires_dist", []) or []
         else:
             # sdist: extract PKG-INFO
             with tarfile.open(dist_path) as tar:

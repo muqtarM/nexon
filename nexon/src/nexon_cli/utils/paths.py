@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 
 # Base directory for all Nexon data; override via NEXON_HOME env var
-BASE_DIR = Path(os.getenv("NEXON_HOME", Path.home() / ".nexon"))
+BASE_DIR = Path(os.getenv("NEXON_BASE_DIR", Path.home() / ".nexon"))
 
 # Core subdirectories
 ENVIRONMENTS_DIR = BASE_DIR / "environments"

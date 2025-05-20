@@ -1,12 +1,13 @@
 import os
 import shutil
+import yaml
 from pathlib import Path
 from typing import List, Dict
 
 from packaging.version import Version, InvalidVersion
 from nexon_cli.utils.file_ops import save_yaml, load_yaml
 from nexon_cli.utils.logger import logger
-from nexon_cli.utils.paths import ENVIRONMENTS_DIR, PACKAGES_DIR
+from nexon_cli.core.configs import config
 from nexon_cli.core.dependency_solver import DependencySolver, DependencyError
 from nexon_cli.core.plugin_manager import plugin_manager
 
@@ -20,12 +21,42 @@ class PackageManager:
         Ensure that the base directories for environments and packages exist.
         :return:
         """
-        self.env_dir = Path(ENVIRONMENTS_DIR)
-        self.pkg_dir = Path(PACKAGES_DIR)
+        self.env_dir = Path(config.environments_dir)
+        self.pkg_dir = Path(config.packages_dir)
         self.solver = DependencySolver()
 
         self.env_dir.mkdir(parents=True, exist_ok=True)
         self.pkg_dir.mkdir(parents=True, exist_ok=True)
+
+    def load_recipes(self, pkg_versions: list[str]) -> dict[str, dict[str, str]]:
+        """
+        Given a list of strings like ["foo-1.0.0", "bar-2.1.3"], load each
+        package.yaml and return { "foo": {cmd_name: cmd_tpl, …}, "bar": {…} }.
+        """
+        recipes: dict[str, dict[str, str]] = {}
+        for pkgver in pkg_versions:
+            # split off version at last hyphen
+            try:
+                name, version = pkgver.rsplit("-", 1)
+            except ValueError:
+                # malformed pkgver, skip
+                continue
+
+            pkg_yaml = self.pkg_dir / name / version / "package.yaml"
+            if not pkg_yaml.exists():
+                continue
+
+            try:
+                data = yaml.safe_load(pkg_yaml.read_text(encoding="utf-8")) or {}
+            except Exception:
+                # invalid YAML? skip
+                continue
+
+            cmds = data.get("commands", {})
+            if isinstance(cmds, dict) and cmds:
+                recipes[name] = cmds
+
+        return recipes
 
     def create_package(self, name: str, version: str = "0.1.0") -> None:
         """

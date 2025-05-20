@@ -17,8 +17,10 @@ dependencies = [
   "jinja2",
   "fastapi[all]",
   "uvicorn",
+  "sentry-sdk",
+  "prometheus-client",
   # ...
 ]
 
 [project.scripts]
-nexon = "nexon_cli.cli:app"
+nexon = "nexon_cli.cli:cli"

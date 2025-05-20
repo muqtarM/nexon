@@ -1,4 +1,5 @@
 # nexon_cli/cli.py
+import time
 
 import typer
 
@@ -84,6 +85,16 @@ import nexon_cli.commands.pipeline as pipeline_cmds
 import nexon_cli.commands.init as init_cmds
 import nexon_cli.commands.snapshot as snapshot_cmds
 
+from nexon_cli.core.sentry_integration import init_sentry
+from nexon_cli.core.metrics_cli import record_cli_metrics, push_metrics
+from nexon_cli.core.tenant_manager import CLITenantManager
+
+import nexon_cli.commands.tutorial as tutorial_cmds
+import nexon_cli.commands.generate_sdk as generate_sdk_cmds
+
+# before any commands run
+init_sentry()
+
 cli = typer.Typer(help="Nexon: Next-Gen Multimedia Environment Manager")
 
 # Register commands
@@ -165,6 +176,28 @@ cli.add_typer(pipeline_cmds.app, name="pipeline", help="Pipeline template")
 cli.add_typer(init_cmds.app, name="init", help="Quickstart new project")
 cli.add_typer(snapshot_cmds.app, name="snapshot", help="Snapshots (create/list/restore)")
 
+cli.add_typer(tutorial_cmds.app, name="tutorial", help="Interactive in-terminal tutorial")
+cli.add_typer(generate_sdk_cmds.app, name="generate-sdk", help="Generate SDK client from OpenAPI")
+
+
+# @cli.callback(invoke_without_command=True)
+# def main(tenant: str = typer.Option(None, "--tenant", "-t", help="Tenant ID")):
+#     """
+#     Nexon Cli entrypoint. Must specify --tenant or set NEXON_TENANT.
+#     """
+#     if tenant:
+#         CLITenantManager.set_tenant(tenant)
+#     else:
+#         # will raise if not set in env
+#         CLITenantManager.get_tenant()
+
+
 # Entry point
 if __name__ == '__main__':
-    cli()
+    start = time.time()
+    try:
+        cli()
+    finally:
+        dur = time.time() - start
+        record_cli_metrics("main", dur)
+        push_metrics()

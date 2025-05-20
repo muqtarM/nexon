@@ -1,0 +1,11 @@
+hpa:
+  minReplicas: 2
+  maxReplicas: 5
+  cpuPercent: 75
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: ["ALL"]

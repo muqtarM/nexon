@@ -11,7 +11,7 @@ from nexon_cli.core.auth_manager import AuthManager, AuthError
 from nexon_cli.models.environment_model import EnvironmentModel
 from nexon_cli.core.package_manager import PackageManager
 from nexon_cli.core.plugin_manager import plugin_manager
-from nexon_cli.utils.paths import ENVIRONMENTS_DIR
+from nexon_cli.core.configs import config
 from nexon_cli.utils.audit import log
 
 
@@ -21,7 +21,8 @@ class EnvironmentManager:
         self.auth = AuthManager()
         self.interpreter_manager = InterpreterManager()
         # Ensure base directory exists
-        ENVIRONMENTS_DIR.mkdir(parents=True, exist_ok=True)
+        self.envs_dir = Path(config.environments_dir)
+        self.envs_dir.mkdir(parents=True, exist_ok=True)
 
     def create_environment(self, env_name: str, role: str = None):
         """
@@ -35,7 +36,7 @@ class EnvironmentManager:
 
         plugin_manager.trigger("pre_create_env", env_name=env_name, role=role)
 
-        env_path = ENVIRONMENTS_DIR / f"{env_name}.yaml"
+        env_path = self.envs_dir / f"{env_name}.yaml"
 
         if env_path.exists():
             logger.warning(f"Environment '{env_name}' already exists. Overwriting...")
@@ -65,7 +66,7 @@ class EnvironmentManager:
         # No strict permission needed for activation
         self.auth.check("activate_env")  # You can allow all to activate
 
-        env_file = ENVIRONMENTS_DIR / f"{env_name}.yaml"
+        env_file = self.envs_dir / f"{env_name}.yaml"
         if not env_file.exists():
             logger.error(f"Environment '{env_name}' does not exist.")
             return
@@ -121,8 +122,7 @@ class EnvironmentManager:
             - role: str
             - created_at: str
         """
-        env_dir = Path(ENVIRONMENTS_DIR)
-        all_files = sorted(env_dir.glob("*.yaml"))
+        all_files = sorted(self.envs_dir.glob("*.yaml"))
         # Filter our lockfiles
         env_files = [f for f in all_files if not f.name.endswith(".lock.yaml")]
 
@@ -151,7 +151,7 @@ class EnvironmentManager:
         Load and return the full YAML for the named environment.
         Raises FileNotFoundError if missing.
         """
-        env_file = Path(ENVIRONMENTS_DIR) / f"{env_name}.yaml"
+        env_file = self.envs_dir / f"{env_name}.yaml"
         if not env_file.exists():
             raise FileNotFoundError(f"Environment '{env_name}' not found.")
         return load_yaml(env_file)
@@ -163,13 +163,13 @@ class EnvironmentManager:
         :return:
         """
 
-        env_file = ENVIRONMENTS_DIR / f"{env_name}.yaml"
+        env_file = self.envs_dir / f"{env_name}.yaml"
         if not env_file.exists():
             logger.error(f"Environment '{env_name}' does not exist.")
             return
 
         env_data = load_yaml(env_file)
-        lockfile_path = ENVIRONMENTS_DIR / f"{env_name}.lock.yaml"
+        lockfile_path = self.envs_dir / f"{env_name}.lock.yaml"
 
         save_yaml(lockfile_path, env_data)
         logger.success(f"Lockfile created: {lockfile_path}")
@@ -181,9 +181,8 @@ class EnvironmentManager:
         :param env_b:
         :return:
         """
-        env_dir = ENVIRONMENTS_DIR
-        file_a = env_dir / f"{env_a}.yaml"
-        file_b = env_dir / f"{env_b}.yaml"
+        file_a = self.envs_dir / f"{env_a}.yaml"
+        file_b = self.envs_dir / f"{env_b}.yaml"
 
         if not file_a.exists():
             logger.error(f"Environment '{env_a}' not found at {file_a}")
@@ -230,7 +229,7 @@ class EnvironmentManager:
         If `output_path` is provided, writes to the file; otherwise returns the content.
         """
         # Ensure environment exists and load base data
-        env_file = Path(ENVIRONMENTS_DIR) / f"{env_name}.yaml"
+        env_file = self.envs_dir / f"{env_name}.yaml"
         if not env_file.exists():
             raise FileNotFoundError(f"Environment '{env_name}' not found.")
 
